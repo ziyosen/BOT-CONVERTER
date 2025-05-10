@@ -1,10 +1,7 @@
 import { generateClashConfig, generateNekoboxConfig, generateSingboxConfig } from './configGenerators.js';
 
 export default class TelegramBot {
-  constructor(token, apiUrl = 'https://api.telegram.org') {
-    this.token = token;
-    this.apiUrl = apiUrl;
-  }
+  // ... (constructor tetap sama)
 
   async handleUpdate(update) {
     if (!update.message) return new Response('OK', { status: 200 });
@@ -13,68 +10,59 @@ export default class TelegramBot {
     const text = update.message.text || '';
 
     if (text.startsWith('/start')) {
-      await this.sendMessage(chatId, 'Welcome to V2Ray Config Bot! Send me your V2Ray links (VMess, VLESS, Trojan, Shadowsocks) and I will convert them to Clash, Nekobox, and Singbox configurations.');
+      await this.sendMessage(chatId, 
+        `🤖 *V2Ray Config Converter Bot*\n\n` +
+        `Kirim beberapa link sekaligus (VMess/VLESS/Trojan/Shadowsocks), ` +
+        `saya akan gabungkan menjadi 1 file config untuk:\n` +
+        `- Clash (YAML)\n- Nekobox (JSON)\n- Singbox (BPF)\n\n` +
+        `Contoh:\n\`\`\`\nvmess://...\nvless://...\ntrojan://...\n\`\`\``,
+        { parse_mode: 'Markdown' }
+      );
     } else if (text.includes('://')) {
       try {
-        const links = text.split('\n').filter(line => line.trim().includes('://'));
+        const links = text.split('\n')
+          .map(line => line.trim())
+          .filter(line => line.startsWith('vmess://') || 
+                         line.startsWith('vless://') || 
+                         line.startsWith('trojan://') || 
+                         line.startsWith('ss://'));
 
         if (links.length === 0) {
-          await this.sendMessage(chatId, 'No valid links found. Please send VMess, VLESS, Trojan, or Shadowsocks links.');
+          await this.sendMessage(chatId, '❌ Tidak menemukan link yang valid. Pastikan format link benar.');
           return new Response('OK', { status: 200 });
         }
 
-        // Process each link batch
-        const batchSize = 10; // Maximum number of links to process at once
-        for (let i = 0; i < links.length; i += batchSize) {
-          const linkBatch = links.slice(i, i + batchSize);
+        // Tampilkan pesan sedang memproses
+        await this.sendMessage(chatId, `🔄 Memproses ${links.length} link...`);
 
-          // Generate configurations for the batch of links
-          const clashConfig = generateClashConfig(linkBatch, true);
-          const nekoboxConfig = generateNekoboxConfig(linkBatch, true);
-          const singboxConfig = generateSingboxConfig(linkBatch, true);
+        // Generate configs
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const clashConfig = generateClashConfig(links, true);
+        const nekoboxConfig = generateNekoboxConfig(links, true);
+        const singboxConfig = generateSingboxConfig(links, true);
 
-          // Send files for each batch
-          await this.sendDocument(chatId, clashConfig, `config-${i / batchSize + 1}.yaml`, 'text/yaml');
-          await this.sendDocument(chatId, nekoboxConfig, `config-${i / batchSize + 1}.json`, 'application/json');
-          await this.sendDocument(chatId, singboxConfig, `config-${i / batchSize + 1}.bpf`, 'application/json');
-        }
+        // Kirim file
+        await this.sendDocument(chatId, clashConfig, `clash-config-${timestamp}.yaml`, 'text/yaml');
+        await this.sendDocument(chatId, nekoboxConfig, `nekobox-config-${timestamp}.json`, 'application/json');
+        await this.sendDocument(chatId, singboxConfig, `singbox-config-${timestamp}.bpf`, 'application/json');
+
+        await this.sendMessage(chatId, `✅ Berhasil generate config dari ${links.length} link!`);
+
       } catch (error) {
-        console.error('Error processing links:', error);
-        await this.sendMessage(chatId, `Error: ${error.message}`);
+        console.error('Error:', error);
+        await this.sendMessage(chatId, `❌ Gagal memproses: ${error.message}`);
       }
     } else {
-      await this.sendMessage(chatId, 'Please send VMess, VLESS, Trojan, or Shadowsocks links for conversion.');
+      await this.sendMessage(chatId, 
+        'Kirim beberapa link config (VMess/VLESS/Trojan/Shadowsocks) dalam 1 pesan, contoh:\n\n' +
+        'vmess://...\n' +
+        'vless://...\n' +
+        'trojan://...'
+      );
     }
 
     return new Response('OK', { status: 200 });
   }
 
-  async sendMessage(chatId, text) {
-    const url = `${this.apiUrl}/bot${this.token}/sendMessage`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: text
-      })
-    });
-    return response.json();
-  }
-
-  async sendDocument(chatId, content, filename, mimeType) {
-    const formData = new FormData();
-    const blob = new Blob([content], { type: mimeType });
-    formData.append('document', blob, filename);
-    formData.append('chat_id', chatId.toString());
-
-    const response = await fetch(
-      `${this.apiUrl}/bot${this.token}/sendDocument`, {
-        method: 'POST',
-        body: formData
-      }
-    );
-
-    return response.json();
-  }
+  // ... (method lainnya tetap sama)
 }
