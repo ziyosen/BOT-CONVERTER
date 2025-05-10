@@ -1,5 +1,6 @@
+window.atob() (hanya untuk browser)
 function atob(str) {
-  return Buffer.from(str, 'base64').toString('utf-8');
+  return window.atob(str);  // Menggunakan built-in atob di browser
 }
 
 // Fungsi utama untuk memparse berbagai jenis link
