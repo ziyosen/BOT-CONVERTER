@@ -1,13 +1,13 @@
-const { generateClashConfig, generateNekoboxConfig, generateSingboxConfig } = require('./configGenerators');
+import { generateClashConfig, generateNekoboxConfig, generateSingboxConfig } from './configGenerators.js';
 
-class TelegramBot {
+export default class TelegramBot {
   constructor(token, apiUrl = 'https://api.telegram.org') {
     this.token = token;
     this.apiUrl = apiUrl;
   }
 
   async handleUpdate(update) {
-    if (!update.message) return;
+    if (!update.message) return new Response('OK', { status: 200 });
 
     const chatId = update.message.chat.id;
     const text = update.message.text || '';
@@ -20,7 +20,7 @@ class TelegramBot {
         
         if (links.length === 0) {
           await this.sendMessage(chatId, 'No valid links found. Please send VMess, VLESS, Trojan, or Shadowsocks links.');
-          return;
+          return new Response('OK', { status: 200 });
         }
 
         // Generate configurations
@@ -40,6 +40,8 @@ class TelegramBot {
     } else {
       await this.sendMessage(chatId, 'Please send VMess, VLESS, Trojan, or Shadowsocks links for conversion.');
     }
+
+    return new Response('OK', { status: 200 });
   }
 
   async sendMessage(chatId, text) {
@@ -56,30 +58,18 @@ class TelegramBot {
   }
 
   async sendDocument(chatId, content, filename, mimeType) {
-    // For Cloudflare Workers, we need to create a downloadable URL
-    // This is a simplified approach - in a real worker you might use R2 or another storage solution
-    
-    // Create a blob URL (this is a simplified approach for the example)
-    // In a real worker, you'd need to implement proper file handling
+    const formData = new FormData();
     const blob = new Blob([content], { type: mimeType });
-    const fileUrl = URL.createObjectURL(blob);
-    
-    const url = `${this.apiUrl}/bot${this.token}/sendDocument`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        document: fileUrl,
-        filename: filename
-      })
-    });
-    
-    // Clean up
-    URL.revokeObjectURL(fileUrl);
-    
+    formData.append('document', blob, filename);
+    formData.append('chat_id', chatId.toString());
+
+    const response = await fetch(
+      `${this.apiUrl}/bot${this.token}/sendDocument`, {
+        method: 'POST',
+        body: formData
+      }
+    );
+
     return response.json();
   }
 }
-
-module.exports = TelegramBot;
