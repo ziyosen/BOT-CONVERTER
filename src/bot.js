@@ -13,7 +13,7 @@ export default class TelegramBot {
     const text = update.message.text || '';
 
     if (text.startsWith('/start')) {
-      await this.sendMessage(chatId, '🤖 *Converter Bot*\n\n Send me your V2Ray links (VMess, VLESS, Trojan, Shadowsocks) and I will convert them to Clash, Nekobox, and Singbox configurations.\n\n Contoh :');
+      await this.sendMessage(chatId, '🤖 *Stupid-World Converter Bot*\n\nKirimkan saya link konfigurasi V2Ray dan saya akan mengubahnya ke format Singbox.\n\nContoh:\nvless://...\nvmess://...\ntrojan://...\nss://...');
     } else if (text.includes('://')) {
       try {
         const links = text.split('\n').filter(line => line.trim().includes('://'));
