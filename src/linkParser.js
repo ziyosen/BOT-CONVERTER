@@ -1,4 +1,9 @@
 function atob(str) {
+  // Use native atob in browsers
+  if (typeof window !== 'undefined') {
+    return window.atob(str);
+  }
+  // Fallback to Buffer in Node.js environments
   return Buffer.from(str, 'base64').toString('binary');
 }
 
@@ -97,4 +102,4 @@ function parseShadowsocksLink(link) {
   }
   
   throw new Error('Only Shadowsocks with v2ray-plugin/WebSocket transport is supported');
-}
+}v
