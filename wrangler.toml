@@ -4,4 +4,4 @@ account_id = "dcb5cb4caca718bf2af93c10267ac007"
 workers_dev = true
 
 [vars]
-TELEGRAM_BOT_TOKEN = "7626291818:AAG7dEWhfWZBu8j9i7JWQ71vzNpz9h7UZq0"
+TELEGRAM_BOT_TOKEN = "@telegramBotToken"
