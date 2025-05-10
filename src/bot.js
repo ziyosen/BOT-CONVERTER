@@ -17,22 +17,27 @@ export default class TelegramBot {
     } else if (text.includes('://')) {
       try {
         const links = text.split('\n').filter(line => line.trim().includes('://'));
-        
+
         if (links.length === 0) {
           await this.sendMessage(chatId, 'No valid links found. Please send VMess, VLESS, Trojan, or Shadowsocks links.');
           return new Response('OK', { status: 200 });
         }
 
-        // Generate configurations
-        const clashConfig = generateClashConfig(links, true);
-        const nekoboxConfig = generateNekoboxConfig(links, true);
-        const singboxConfig = generateSingboxConfig(links, true);
+        // Process each link batch
+        const batchSize = 10; // Maximum number of links to process at once
+        for (let i = 0; i < links.length; i += batchSize) {
+          const linkBatch = links.slice(i, i + batchSize);
 
-        // Send files
-        await this.sendDocument(chatId, clashConfig, 'config.yaml', 'text/yaml');
-        await this.sendDocument(chatId, nekoboxConfig, 'config.json', 'application/json');
-        await this.sendDocument(chatId, singboxConfig, 'config.bpf', 'application/json');
+          // Generate configurations for the batch of links
+          const clashConfig = generateClashConfig(linkBatch, true);
+          const nekoboxConfig = generateNekoboxConfig(linkBatch, true);
+          const singboxConfig = generateSingboxConfig(linkBatch, true);
 
+          // Send files for each batch
+          await this.sendDocument(chatId, clashConfig, `config-${i / batchSize + 1}.yaml`, 'text/yaml');
+          await this.sendDocument(chatId, nekoboxConfig, `config-${i / batchSize + 1}.json`, 'application/json');
+          await this.sendDocument(chatId, singboxConfig, `config-${i / batchSize + 1}.bpf`, 'application/json');
+        }
       } catch (error) {
         console.error('Error processing links:', error);
         await this.sendMessage(chatId, `Error: ${error.message}`);
