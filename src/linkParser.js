@@ -1,4 +1,8 @@
-function parseV2RayLink(link) {
+function atob(str) {
+  return Buffer.from(str, 'base64').toString('binary');
+}
+
+export function parseV2RayLink(link) {
   if (link.startsWith('vmess://')) {
     return parseVMessLink(link);
   } else if (link.startsWith('vless://')) {
@@ -75,7 +79,6 @@ function parseShadowsocksLink(link) {
   const url = new URL(link);
   const params = new URLSearchParams(url.search);
   
-  // Handle SS with v2ray-plugin
   if (params.get('plugin') === 'v2ray-plugin' || params.get('type') === 'ws') {
     return {
       type: 'ss',
@@ -95,5 +98,3 @@ function parseShadowsocksLink(link) {
   
   throw new Error('Only Shadowsocks with v2ray-plugin/WebSocket transport is supported');
 }
-
-module.exports = { parseV2RayLink };
