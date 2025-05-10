@@ -68,7 +68,28 @@ export function parseV2RayLink(link) {
         sni: config.sni || config.host || config.add
       };
     }
-    function parseVLESSLink(link) {
+
+    if (link.startsWith('vless://')) {
+      return parseVLESSLink(link);
+    }
+
+    if (link.startsWith('trojan://')) {
+      return parseTrojanLink(link);
+    }
+
+    if (link.startsWith('ss://')) {
+      return parseShadowsocksLink(link);
+    }
+
+    throw new Error('Unsupported link type');
+
+  } catch (error) {
+    console.error(`Failed to parse link: ${link}`, error);
+    throw new Error(`Gagal parsing link VMess: ${error.message}`);
+  }
+}
+
+function parseVLESSLink(link) {
   const url = new URL(link);
   const params = new URLSearchParams(url.search);
   
@@ -126,8 +147,6 @@ function parseShadowsocksLink(link) {
       sni: params.get('sni') || params.get('host') || url.hostname
     };
   }
-  } catch (error) {
-    console.error(`Failed to parse link: ${link}`, error);
-    throw new Error(`Gagal parsing link VMess: ${error.message}`);
-  }
+
+  throw new Error('Shadowsocks link invalid');
 }
