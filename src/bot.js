@@ -13,7 +13,7 @@ export default class TelegramBot {
     const text = update.message.text || '';
 
     if (text.startsWith('/start')) {
-      await this.sendMessage(chatId, '🤖 *Stupid-World Converter Bot*\n\nKirimkan saya link konfigurasi V2Ray dan saya akan mengubahnya ke format Singbox,Nekobox Dan Clash.\n\nContoh:\nvless://...\nvmess://...\ntrojan://...\nss://...');
+      await this.sendMessage(chatId, '🤖 *Stupid-World Converter Bot*\n\nKirimkan saya link konfigurasi V2Ray dan saya akan mengubahnya ke format Singbox,Nekobox Dan Clash.\n\nContoh:\nvless://...\nvmess://...\ntrojan://...\nss://...\n**Catatan:**\n- Maksimal **10 link** per permintaan.\n- Disarankan menggunakan **Singbox versi 1.10.3** atau **1.11.8** untuk hasil terbaik.\n- Jangan jadi **bacot tot**, baca baik-baik dulu sebelum tanya.');
     } else if (text.includes('://')) {
       try {
         const links = text.split('\n').filter(line => line.trim().includes('://'));
@@ -30,8 +30,8 @@ export default class TelegramBot {
 
         // Send files
         await this.sendDocument(chatId, clashConfig, 'clash.yaml', 'text/yaml');
-        await this.sendDocument(chatId, nekoboxConfig, 'nekoboc.json', 'application/json');
-        await this.sendDocument(chatId, singboxConfig, 'singbox v1.10.3 / v1.11.8.bpf', 'application/json');
+        await this.sendDocument(chatId, nekoboxConfig, 'nekobox.json', 'application/json');
+        await this.sendDocument(chatId, singboxConfig, 'singbox.bpf', 'application/json');
 
       } catch (error) {
         console.error('Error processing links:', error);
