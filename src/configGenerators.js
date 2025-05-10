@@ -1,6 +1,6 @@
-import { parseV2RayLink } from './linkParser.js';
+const { parseV2RayLink } = require('./linkParser');
 
-export function generateClashConfig(links, isFullConfig = false) {
+function generateClashConfig(links, isFullConfig = false) {
   const parsedLinks = links.map(link => parseV2RayLink(link));
   
   let config = `# Clash Configuration\n# Generated at: ${new Date().toISOString()}\n\n`;
@@ -157,7 +157,7 @@ rules:
   return config;
 }
 
-export function generateNekoboxConfig(links, isFullConfig = false) {
+function generateNekoboxConfig(links, isFullConfig = false) {
   const parsedLinks = links.map(link => parseV2RayLink(link));
   
   let config = isFullConfig 
@@ -480,7 +480,7 @@ export function generateNekoboxConfig(links, isFullConfig = false) {
   return config;
 }
 
-export function generateSingboxConfig(links, isFullConfig = false) {
+function generateSingboxConfig(links, isFullConfig = false) {
   const parsedLinks = links.map(link => parseV2RayLink(link));
   
   let config = isFullConfig 
@@ -774,3 +774,9 @@ export function generateSingboxConfig(links, isFullConfig = false) {
   
   return config;
 }
+
+module.exports = {
+  generateClashConfig,
+  generateNekoboxConfig,
+  generateSingboxConfig
+};
