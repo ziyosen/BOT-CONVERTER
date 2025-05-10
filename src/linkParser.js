@@ -1,18 +1,36 @@
+// Menggunakan TextDecoder untuk decode base64 di lingkungan CF Workers
 function decodeBase64(str) {
-  // Using atob which is available in Cloudflare Workers
-  return atob(str.replace(/-/g, '+').replace(/_/g, '/'));
-}
+  // Alternatif 1: Menggunakan atob (browser API)
+  if (typeof atob === 'function') {
+    return atob(str);
+  }
+  
+  // Alternatif 2: Implementasi manual base64 decode
+  const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let result = '';
+  let i = 0;
+  let char1, char2, char3;
+  let enc1, enc2, enc3, enc4;
 
-function parseUrlParams(url) {
-  const params = new URLSearchParams(url.search);
-  return {
-    type: params.get('type') || 'tcp',
-    path: params.get('path') || '',
-    host: params.get('host') || url.hostname,
-    sni: params.get('sni') || params.get('host') || url.hostname,
-    security: params.get('security') || 'none',
-    encryption: params.get('encryption') || 'none'
-  };
+  // Remove all characters that are not A-Z, a-z, 0-9, +, /, or =
+  str = str.replace(/[^A-Za-z0-9+/=]/g, '');
+
+  while (i < str.length) {
+    enc1 = base64Chars.indexOf(str.charAt(i++));
+    enc2 = base64Chars.indexOf(str.charAt(i++));
+    enc3 = base64Chars.indexOf(str.charAt(i++));
+    enc4 = base64Chars.indexOf(str.charAt(i++));
+
+    char1 = (enc1 << 2) | (enc2 >> 4);
+    char2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+    char3 = ((enc3 & 3) << 6) | enc4;
+
+    result += String.fromCharCode(char1);
+    if (enc3 !== 64) result += String.fromCharCode(char2);
+    if (enc4 !== 64) result += String.fromCharCode(char3);
+  }
+
+  return result;
 }
 
 export function parseV2RayLink(link) {
@@ -24,16 +42,19 @@ export function parseV2RayLink(link) {
       
       try {
         config = JSON.parse(decoded);
-      } catch {
-        // Fallback for non-standard formats
-        const jsonMatch = decoded.match(/{.*}/);
-        if (jsonMatch) config = JSON.parse(jsonMatch[0]);
-        else throw new Error('Invalid VMess format');
+      } catch (e) {
+        // Fallback untuk format non-standard
+        const match = decoded.match(/{"v":"\d+".*}/);
+        if (match) {
+          config = JSON.parse(match[0]);
+        } else {
+          throw new Error('Format VMess tidak valid');
+        }
       }
-
+      
       return {
         type: 'vmess',
-        name: config.ps || `VMess ${config.add}:${config.port}`,
+        name: config.ps || `VMess-${config.add}:${config.port}`,
         server: config.add,
         port: config.port,
         uuid: config.id,
@@ -47,64 +68,66 @@ export function parseV2RayLink(link) {
         sni: config.sni || config.host || config.add
       };
     }
+    function parseVLESSLink(link) {
+  const url = new URL(link);
+  const params = new URLSearchParams(url.search);
+  
+  return {
+    type: 'vless',
+    name: decodeURIComponent(url.hash.substring(1)),
+    server: url.hostname,
+    port: parseInt(url.port),
+    uuid: url.username,
+    tls: params.get('security') === 'tls',
+    skipCertVerify: false,
+    network: params.get('type') || 'tcp',
+    wsPath: params.get('path') || '',
+    wsHost: params.get('host') || url.hostname,
+    sni: params.get('sni') || params.get('host') || url.hostname
+  };
+}
 
-    const url = new URL(link);
-    const params = parseUrlParams(url);
-    const name = decodeURIComponent(url.hash.substring(1) || 
-                `${url.protocol.replace('://','')} ${url.hostname}:${url.port}`;
+function parseTrojanLink(link) {
+  const url = new URL(link);
+  const params = new URLSearchParams(url.search);
+  
+  return {
+    type: 'trojan',
+    name: decodeURIComponent(url.hash.substring(1)),
+    server: url.hostname,
+    port: parseInt(url.port),
+    password: url.username,
+    tls: params.get('security') === 'tls',
+    skipCertVerify: false,
+    network: params.get('type') || 'tcp',
+    wsPath: params.get('path') || '',
+    wsHost: params.get('host') || url.hostname,
+    sni: params.get('sni') || params.get('host') || url.hostname
+  };
+}
 
-    if (link.startsWith('vless://')) {
-      return {
-        type: 'vless',
-        name,
-        server: url.hostname,
-        port: parseInt(url.port),
-        uuid: url.username,
-        tls: params.security === 'tls',
-        skipCertVerify: false,
-        network: params.type,
-        wsPath: params.path,
-        wsHost: params.host,
-        sni: params.sni
-      };
-    }
-
-    if (link.startsWith('trojan://')) {
-      return {
-        type: 'trojan',
-        name,
-        server: url.hostname,
-        port: parseInt(url.port),
-        password: url.username,
-        tls: params.security === 'tls',
-        skipCertVerify: false,
-        network: params.type,
-        wsPath: params.path,
-        wsHost: params.host,
-        sni: params.sni
-      };
-    }
-
-    if (link.startsWith('ss://')) {
-      return {
-        type: 'ss',
-        name,
-        server: url.hostname,
-        port: parseInt(url.port),
-        cipher: url.protocol.substring(3, url.protocol.length-1) || 'none',
-        password: url.username,
-        tls: params.security === 'tls',
-        skipCertVerify: false,
-        network: params.type,
-        wsPath: params.path,
-        wsHost: params.host,
-        sni: params.sni
-      };
-    }
-
-    throw new Error('Unsupported link type');
+function parseShadowsocksLink(link) {
+  const url = new URL(link);
+  const params = new URLSearchParams(url.search);
+  
+  if (params.get('plugin') === 'v2ray-plugin' || params.get('type') === 'ws') {
+    return {
+      type: 'ss',
+      name: decodeURIComponent(url.hash.substring(1)),
+      server: url.hostname,
+      port: parseInt(url.port),
+      cipher: url.protocol.substring(3) || 'none',
+      password: url.username,
+      tls: params.get('security') === 'tls',
+      skipCertVerify: false,
+      network: params.get('type') || 'tcp',
+      wsPath: params.get('path') || '',
+      wsHost: params.get('host') || url.hostname,
+      sni: params.get('sni') || params.get('host') || url.hostname
+    };
+  }
   } catch (error) {
-    console.error(`Failed to parse link: ${link.substring(0, 50)}...`, error);
-    throw new Error(`Invalid config: ${error.message}`);
+    console.error(`Failed to parse link: ${link}`, error);
+    throw new Error(`Gagal parsing link VMess: ${error.message}`);
   }
 }
