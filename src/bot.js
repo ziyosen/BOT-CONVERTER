@@ -167,7 +167,12 @@ export default class TelegramBot {
       await this.sendMessage(chatId, 'Perintah tidak dikenali. Gunakan /start, /create, atau /convert.');
     } else if (update.callback_query) {
       const chatId = update.callback_query.message.chat.id;
+      const messageId = update.callback_query.message.message_id;
       const data = update.callback_query.data;
+      
+      // Update current message ID before processing
+      this.currentMessageId = messageId;
+      
       await this.handleCallbackQuery(chatId, data);
     }
 
@@ -290,7 +295,7 @@ Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
         
         const domainButtons = this.wildcardDomains.map(domain => ({
           text: domain,
-          callback_data: `domain_${domain}`
+          callback_data: `domain_${domain.replace(/\./g, '_')}` // Replace dots with underscores
         }));
         
         const { message_id } = await this.sendInlineButtons(
@@ -309,7 +314,7 @@ Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
         await this.sendMessage(chatId, this.formatLinkMessage(links));
 
       } else if (data.startsWith('domain_')) {
-        const selectedDomain = data.split('_')[1];
+        const selectedDomain = data.split('_').slice(1).join('.'); // Reconstruct domain with dots
         this.userProgress[chatId].domain = selectedDomain;
         
         await this.deleteMessage(chatId, this.currentMessageId);
@@ -323,6 +328,10 @@ Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
   }
 
   generateAllLinks(config) {
+    if (!config || !config.server || !config.ipPort || !config.wildcard) {
+      throw new Error('Invalid configuration for generating links');
+    }
+
     const { server, ipPort, wildcard, domain } = config;
     const [ip, port] = ipPort.split(':');
 
