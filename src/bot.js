@@ -263,37 +263,40 @@ Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
 
   async handleCallbackQuery(chatId, data) {
     try {
-        console.log(`[DEBUG] Callback data: ${data}`);
-        console.log(`[DEBUG] Current progress:`, JSON.stringify(this.userProgress[chatId]));
-
-        // Ensure user progress exists
+        console.log(`[DEBUG] Handling callback for chat ${chatId}:`, data);
+        
+        // Initialize user progress if not exists
         if (!this.userProgress[chatId]) {
             this.userProgress[chatId] = {};
         }
 
         if (data.startsWith('server_')) {
             const server = data.split('_')[1];
-            this.userProgress[chatId] = {
-                server,
-                step: 'server_selected' // Track progress
-            };
+            this.userProgress[chatId] = { server };
             
             await this.deleteMessage(chatId, this.currentMessageId);
             
-            const searchingMsg = await this.sendMessage(chatId, `🔍 Searching proxy for ${this.countryFlags[server]} ${server}...`);
+            const searchingMsg = await this.sendMessage(chatId, `🔍 Mencari proxy untuk ${this.countryFlags[server]} ${server}...`);
             
             const ipPort = await this.fetchProxyList(server, chatId);
+            console.log(`[DEBUG] Found proxy:`, ipPort);
+            
             if (!ipPort.includes(':')) {
                 await this.editMessage(chatId, searchingMsg, ipPort);
                 return;
             }
 
-            this.userProgress[chatId].ipPort = ipPort;
-            this.userProgress[chatId].step = 'proxy_found';
+            // PROPERLY SAVE THE IP:PORT
+            this.userProgress[chatId] = {
+                ...this.userProgress[chatId],
+                ipPort: ipPort,
+                step: 'proxy_found'
+            };
+            
             await this.deleteMessage(chatId, searchingMsg);
             
             const { message_id } = await this.sendInlineButtons(chatId, 
-                `✅ Proxy Active: ${ipPort}\nSelect domain type:`,
+                `✅ Proxy ditemukan: ${ipPort}\nPilih tipe domain:`,
                 [
                     { text: "🌐 Wildcard", callback_data: "wildcard" },
                     { text: "🚫 No Wildcard", callback_data: "nowildcard" }
@@ -302,26 +305,28 @@ Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
             this.currentMessageId = message_id;
 
         } else if (data === 'wildcard' || data === 'nowildcard') {
-            // Verify we have required data
+            console.log(`[DEBUG] Wildcard selection:`, data);
+            console.log(`[DEBUG] Current progress:`, this.userProgress[chatId]);
+            
+            // STRICT VALIDATION
             if (!this.userProgress[chatId]?.ipPort) {
-                console.error('[ERROR] Missing IP:PORT in progress:', this.userProgress[chatId]);
-                throw new Error('Proxy configuration missing. Please start over with /create');
+                console.error('[ERROR] Missing ipPort in:', this.userProgress[chatId]);
+                throw new Error('Konfigurasi proxy hilang. Silakan mulai ulang dengan /create');
             }
 
             this.userProgress[chatId].wildcard = data === 'wildcard' ? 'Wildcard' : 'No Wildcard';
-            this.userProgress[chatId].step = 'wildcard_selected';
             
             await this.deleteMessage(chatId, this.currentMessageId);
 
             if (data === 'wildcard') {
                 const domainButtons = this.wildcardDomains.map(domain => ({
                     text: domain,
-                    callback_data: `domain_${domain.replace(/\./g, '-')}`
+                    callback_data: `domain_${domain.replace(/\./g, '_')}`
                 }));
                 
                 const { message_id } = await this.sendInlineButtons(
                     chatId,
-                    'Select wildcard domain:',
+                    'Pilih domain wildcard:',
                     domainButtons
                 );
                 this.currentMessageId = message_id;
@@ -331,50 +336,44 @@ Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
             }
 
         } else if (data.startsWith('domain_')) {
-            // Verify previous steps completed
-            if (!this.userProgress[chatId]?.ipPort || !this.userProgress[chatId]?.wildcard) {
-                throw new Error('Configuration incomplete. Please start over with /create');
-            }
-
-            const selectedDomain = data.split('_')[1].replace(/-/g, '.');
+            const selectedDomain = data.split('_')[1].replace(/_/g, '.');
             this.userProgress[chatId].domain = selectedDomain;
-            this.userProgress[chatId].step = 'domain_selected';
             
             await this.deleteMessage(chatId, this.currentMessageId);
             await this.generateAndSendLinks(chatId);
         }
     } catch (error) {
-        console.error('[ERROR] Callback handler failed:', error);
-        await this.sendMessage(chatId, `⚠️ ${error.message}\nPlease use /create to start over.`);
-        delete this.userProgress[chatId]; // Clean up broken state
+        console.error('[ERROR] Callback failed:', error);
+        await this.sendMessage(chatId, `⚠️ Error: ${error.message}\nSilakan gunakan /create untuk memulai ulang.`);
+        delete this.userProgress[chatId];
     }
 }
 
 async generateAndSendLinks(chatId) {
     try {
         const config = this.userProgress[chatId];
-        console.log('[DEBUG] Generating links with:', config);
+        console.log('[DEBUG] Generating links with config:', config);
         
-        // Validate all required fields
-        const requiredFields = ['server', 'ipPort', 'wildcard'];
-        const missingFields = requiredFields.filter(field => !config[field]);
+        // STRICT VALIDATION
+        const required = ['server', 'ipPort', 'wildcard'];
+        const missing = required.filter(field => !config[field]);
         
-        if (missingFields.length > 0) {
-            throw new Error(`Missing configuration: ${missingFields.join(', ')}`);
+        if (missing.length > 0) {
+            throw new Error(`Data tidak lengkap: ${missing.join(', ')}`);
         }
 
         if (config.wildcard === 'Wildcard' && !config.domain) {
-            throw new Error('Domain not selected');
+            throw new Error('Domain belum dipilih');
         }
 
         const links = this.generateAllLinks(config);
         await this.sendMessage(chatId, this.formatLinkMessage(links));
         
-        // Clear progress after successful generation
+        // Clean up
         delete this.userProgress[chatId];
     } catch (error) {
-        console.error('[ERROR] Link generation failed:', error);
-        await this.sendMessage(chatId, `⚠️ Failed to generate links: ${error.message}\nPlease try /create again.`);
+        console.error('[ERROR] Generate links failed:', error);
+        await this.sendMessage(chatId, `⚠️ Gagal membuat konfigurasi: ${error.message}\nSilakan coba /create lagi.`);
         throw error;
     }
 }
