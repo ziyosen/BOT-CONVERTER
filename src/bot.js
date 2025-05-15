@@ -153,20 +153,17 @@ export default class TelegramBot {
         return new Response('OK', { status: 200 });
       }
 
-      // Handle proxy check if user sends IP:PORT format
       const proxyMatch = messageText.match(/^(\d+\.\d+\.\d+\.\d+):(\d+)$/);
       if (proxyMatch) {
         await this.handleProxyCheck(chatId, proxyMatch[1], proxyMatch[2]);
         return new Response('OK', { status: 200 });
       }
 
-      // Handle link conversion if user sends URLs
       if (messageText.includes('://')) {
         await this.handleLinkConversion(chatId, messageText);
         return new Response('OK', { status: 200 });
       }
 
-      // Default response for unrecognized commands
       await this.sendMessage(chatId, 'Perintah tidak dikenali. Gunakan /start, /create, atau /convert.');
     } else if (update.callback_query) {
       const chatId = update.callback_query.message.chat.id;
@@ -197,7 +194,9 @@ Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
       text: `${this.countryFlags[server]} ${server}`,
       callback_data: `server_${server}`
     }));
-    await this.sendInlineButtons(chatId, 'Pilih server:', buttons);
+
+    const { message_id } = await this.sendInlineButtons(chatId, 'Pilih server:', buttons);
+    this.currentMessageId = message_id;
   }
 
   async handleConvertCommand(chatId) {
@@ -241,13 +240,12 @@ Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
         return;
       }
 
-      // Generate configurations
+      await this.sendMessage(chatId, '⏳ Sedang memproses konversi...');
+      
       const clashConfig = generateClashConfig(links, true);
       const nekoboxConfig = generateNekoboxConfig(links, true);
       const singboxConfig = generateSingboxConfig(links, true);
 
-      // Send files
-      await this.sendMessage(chatId, '⏳ Sedang memproses konversi...');
       await this.sendDocument(chatId, clashConfig, 'clash.yaml', 'text/yaml');
       await this.sendDocument(chatId, nekoboxConfig, 'nekobox.json', 'application/json');
       await this.sendDocument(chatId, singboxConfig, 'singbox.bpf', 'application/json');
@@ -259,45 +257,68 @@ Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
   }
 
   async handleCallbackQuery(chatId, data) {
-    if (data.startsWith('server_')) {
-      const server = data.split('_')[1];
-      this.userProgress[chatId].server = server;
-
-      if (this.currentMessageId !== null) {
+    try {
+      if (data.startsWith('server_')) {
+        const server = data.split('_')[1];
+        this.userProgress[chatId] = { server };
+        
         await this.deleteMessage(chatId, this.currentMessageId);
-      }
+        
+        const searchingMsg = await this.sendMessage(chatId, `🔍 Mencari proxy untuk ${this.countryFlags[server]} ${server}...`);
+        
+        const ipPort = await this.fetchProxyList(server, chatId);
+        if (!ipPort.includes(':')) {
+          await this.editMessage(chatId, searchingMsg, ipPort);
+          return;
+        }
 
-      const ipPort = await this.fetchProxyList(server, chatId);
-      if (!ipPort.includes(':')) {
-        await this.sendMessage(chatId, ipPort);
-        return;
-      }
+        this.userProgress[chatId].ipPort = ipPort;
+        await this.deleteMessage(chatId, searchingMsg);
+        
+        const { message_id } = await this.sendInlineButtons(chatId, 
+          `✅ Proxy aktif ditemukan: ${ipPort}\nPilih tipe domain:`,
+          [
+            { text: "🌐 Wildcard", callback_data: "wildcard" },
+            { text: "🚫 No Wildcard", callback_data: "non_wildcard" }
+          ]
+        );
+        this.currentMessageId = message_id;
 
-      this.userProgress[chatId].ipPort = ipPort;
-      await this.sendMessage(chatId, `IP/Port aktif ditemukan: ${ipPort}`);
-      await this.sendInlineButtons(chatId, "Pilih wildcard atau No Wildcard:", [
-        { text: "Wildcard", callback_data: "wildcard" },
-        { text: "No Wildcard", callback_data: "non_wildcard" }
-      ]);
-    } else if (data === 'wildcard') {
-      this.userProgress[chatId].wildcard = 'Wildcard';
-      await this.deleteMessage(chatId, this.currentMessageId);
-      await this.sendInlineButtons(chatId, 'Pilih domain wildcard:', this.wildcardDomains.map(domain => ({
-        text: domain,
-        callback_data: `domain_${domain}`
-      })));
-    } else if (data === 'non_wildcard') {
-      this.userProgress[chatId].wildcard = 'No Wildcard';
-      this.userProgress[chatId].domain = 'vpn.stupidworld.web.id';
-      const links = this.generateAllLinks(this.userProgress[chatId]);
-      await this.deleteMessage(chatId, this.currentMessageId);
-      await this.sendMessage(chatId, this.formatLinkMessage(links));
-    } else if (data.startsWith('domain_')) {
-      const selectedDomain = data.split('_')[1];
-      this.userProgress[chatId].domain = selectedDomain;
-      const links = this.generateAllLinks(this.userProgress[chatId]);
-      await this.deleteMessage(chatId, this.currentMessageId);
-      await this.sendMessage(chatId, this.formatLinkMessage(links));
+      } else if (data === 'wildcard') {
+        this.userProgress[chatId].wildcard = 'Wildcard';
+        await this.deleteMessage(chatId, this.currentMessageId);
+        
+        const domainButtons = this.wildcardDomains.map(domain => ({
+          text: domain,
+          callback_data: `domain_${domain}`
+        }));
+        
+        const { message_id } = await this.sendInlineButtons(
+          chatId,
+          'Pilih domain wildcard:',
+          domainButtons
+        );
+        this.currentMessageId = message_id;
+
+      } else if (data === 'non_wildcard') {
+        this.userProgress[chatId].wildcard = 'No Wildcard';
+        this.userProgress[chatId].domain = 'vpn.stupidworld.web.id';
+        
+        await this.deleteMessage(chatId, this.currentMessageId);
+        const links = this.generateAllLinks(this.userProgress[chatId]);
+        await this.sendMessage(chatId, this.formatLinkMessage(links));
+
+      } else if (data.startsWith('domain_')) {
+        const selectedDomain = data.split('_')[1];
+        this.userProgress[chatId].domain = selectedDomain;
+        
+        await this.deleteMessage(chatId, this.currentMessageId);
+        const links = this.generateAllLinks(this.userProgress[chatId]);
+        await this.sendMessage(chatId, this.formatLinkMessage(links));
+      }
+    } catch (error) {
+      console.error('Error in callback handler:', error);
+      await this.sendMessage(chatId, '⚠️ Terjadi kesalahan, silakan coba lagi.');
     }
   }
 
@@ -322,7 +343,7 @@ Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
         ps: server,
         add: mainDomain,
         port: "443",
-        id: "bef63218-3a18-4f59-acac-28622247e22c",
+        id: uuid,
         aid: "0",
         net: "ws",
         type: "none",
@@ -330,21 +351,21 @@ Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
         path: `/Stupid-World/${ip}-${port}`,
         tls: "tls",
         sni: fullDomain,
-        scy: "zero"
+        scy: "auto"
       })),
       vmessNtls: `vmess://` + btoa(JSON.stringify({
         v: "2",
         ps: server,
         add: mainDomain,
         port: "80",
-        id: "bef63218-3a18-4f59-acac-28622247e22c",
+        id: uuid,
         aid: "0",
         net: "ws",
         type: "none",
         host: fullDomain,
         path: `/Stupid-World/${ip}-${port}`,
         tls: "",
-        scy: "zero"
+        scy: "auto"
       })),
       ss: `ss://${btoa(`${method}:${password}`)}@${mainDomain}:443?encryption=none&type=ws&host=${fullDomain}&path=%2FStupid-World%2F${ip}-${port}&security=tls&sni=${fullDomain}#${server}`
     };
@@ -417,9 +438,11 @@ Gunakan salah satu konfigurasi di aplikasi VPN Anda.`;
   }
 
   async sendInlineButtons(chatId, text, buttons) {
-    const chunkedButtons = [];
-    for (let i = 0; i < buttons.length; i += 4) {
-      chunkedButtons.push(buttons.slice(i, i + 4));
+    const chunkSize = 4;
+    const keyboard = [];
+    
+    for (let i = 0; i < buttons.length; i += chunkSize) {
+      keyboard.push(buttons.slice(i, i + chunkSize));
     }
 
     const url = `${this.apiUrl}/bot${this.token}/sendMessage`;
@@ -430,20 +453,29 @@ Gunakan salah satu konfigurasi di aplikasi VPN Anda.`;
         body: JSON.stringify({ 
           chat_id: chatId, 
           text, 
-          reply_markup: { inline_keyboard: chunkedButtons }, 
-          parse_mode: "Markdown" 
+          reply_markup: { inline_keyboard: keyboard },
+          parse_mode: "Markdown"
         }),
       });
+      
       const data = await response.json();
-      if (data.ok) this.currentMessageId = data.result.message_id;
+      if (data.ok) {
+        return data.result;
+      }
+      return null;
     } catch (error) {
       console.error("Error sending buttons:", error);
+      return null;
     }
   }
 
   async deleteMessage(chatId, messageId) {
     const url = `${this.apiUrl}/bot${this.token}/deleteMessage?chat_id=${chatId}&message_id=${messageId}`;
-    await fetch(url);
+    try {
+      await fetch(url);
+    } catch (error) {
+      console.error("Error deleting message:", error);
+    }
   }
 
   async sendDocument(chatId, content, filename, mimeType) {
@@ -452,13 +484,17 @@ Gunakan salah satu konfigurasi di aplikasi VPN Anda.`;
     formData.append('document', blob, filename);
     formData.append('chat_id', chatId.toString());
 
-    const response = await fetch(
-      `${this.apiUrl}/bot${this.token}/sendDocument`, {
-        method: 'POST',
-        body: formData
-      }
-    );
-
-    return response.json();
+    try {
+      const response = await fetch(
+        `${this.apiUrl}/bot${this.token}/sendDocument`, {
+          method: 'POST',
+          body: formData
+        }
+      );
+      return response.json();
+    } catch (error) {
+      console.error('Error sending document:', error);
+      return null;
+    }
   }
 }
