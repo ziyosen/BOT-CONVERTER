@@ -262,57 +262,80 @@ Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
   }
 
   async function handleCallbackQuery(chatId, data) {
-    if (data.startsWith('server_')) {
-        const server = data.split('_')[1];
-        userProgress[chatId].server = server;
-
-        if (currentMessageId !== null) {
-            await deleteMessage(chatId, currentMessageId);
-        }
-
-        const ipPort = await fetchProxyList(server, chatId);
-        if (!ipPort.includes(':')) {
-            await sendMessage(chatId, ipPort);
-            return;
-        }
-
-        userProgress[chatId].ipPort = ipPort;
-        await sendMessage(chatId, `IP/Port aktif ditemukan: ${ipPort}`);
-        await sendInlineButtons(chatId, "Pilih wildcard atau No Wildcard:", [
-            { text: "Wildcard", callback_data: "wildcard" },
-            { text: "No Wildcard", callback_data: "non_wildcard" }
-        ]);
-    } else if (data === 'wildcard') {
-        userProgress[chatId].wildcard = 'Wildcard';
-
-        // Delete pesan sebelumnya sebelum menampilkan pilihan domain wildcard
-        await deleteMessage(chatId, currentMessageId);
-
-        await sendInlineButtons(chatId, 'Pilih domain wildcard:', wildcardDomains.map(domain => ({
-            text: domain,
-            callback_data: `domain_${domain}`
-        })));
-    } else if (data === 'non_wildcard') {
-        userProgress[chatId].wildcard = 'No Wildcard';
-        userProgress[chatId].domain = 'vpn.stupidworld.web.id';
-
-        const links = generateAllLinks(userProgress[chatId]);
-
-        // Delete pesan sebelumnya sebelum menampilkan hasil konfigurasi
-        await deleteMessage(chatId, currentMessageId);
-
-        await sendMessage(chatId, formatLinkMessage(links));
-    } else if (data.startsWith('domain_')) {
-        const selectedDomain = data.split('_')[1];
-        userProgress[chatId].domain = selectedDomain;
-
-        const links = generateAllLinks(userProgress[chatId]);
-
-        // Delete pesan sebelumnya sebelum menampilkan hasil konfigurasi
-        await deleteMessage(chatId, currentMessageId);
-
-        await sendMessage(chatId, formatLinkMessage(links));
+  try {
+    // Pastikan progress user sudah ada
+    if (!userProgress[chatId]) {
+      userProgress[chatId] = {};
     }
+
+    if (data.startsWith('server_')) {
+      const server = data.split('_')[1];
+      userProgress[chatId].server = server;
+
+      if (currentMessageId !== null) {
+        await deleteMessage(chatId, currentMessageId);
+      }
+
+      const searchingMsg = await sendMessage(chatId, `🔍 Mencari proxy untuk ${server}...`);
+      const ipPort = await fetchProxyList(server, chatId);
+
+      if (!ipPort.includes(':')) {
+        await editMessage(chatId, searchingMsg, ipPort);
+        return;
+      }
+
+      userProgress[chatId].ipPort = ipPort;
+      await deleteMessage(chatId, searchingMsg);
+
+      const { message_id } = await sendInlineButtons(chatId, `✅ Proxy aktif ditemukan: ${ipPort}\nPilih tipe domain:`, [
+        { text: "🌐 Wildcard", callback_data: "wildcard" },
+        { text: "🚫 No Wildcard", callback_data: "non_wildcard" }
+      ]);
+      currentMessageId = message_id;
+
+    } else if (data === 'wildcard') {
+      userProgress[chatId].wildcard = 'Wildcard';
+
+      if (currentMessageId !== null) {
+        await deleteMessage(chatId, currentMessageId);
+      }
+
+      const domainButtons = wildcardDomains.map(domain => ({
+        text: domain,
+        callback_data: `domain_${domain.replace(/\./g, '_')}`
+      }));
+
+      const { message_id } = await sendInlineButtons(chatId, 'Pilih domain wildcard:', domainButtons);
+      currentMessageId = message_id;
+
+    } else if (data === 'non_wildcard') {
+      userProgress[chatId].wildcard = 'No Wildcard';
+      userProgress[chatId].domain = 'vpn.stupidworld.web.id';
+
+      const links = generateAllLinks(userProgress[chatId]);
+
+      if (currentMessageId !== null) {
+        await deleteMessage(chatId, currentMessageId);
+      }
+
+      await sendMessage(chatId, formatLinkMessage(links));
+
+    } else if (data.startsWith('domain_')) {
+      const selectedDomain = data.split('_').slice(1).join('.');
+      userProgress[chatId].domain = selectedDomain;
+
+      const links = generateAllLinks(userProgress[chatId]);
+
+      if (currentMessageId !== null) {
+        await deleteMessage(chatId, currentMessageId);
+      }
+
+      await sendMessage(chatId, formatLinkMessage(links));
+    }
+  } catch (error) {
+    console.error('Error in handleCallbackQuery:', error);
+    await sendMessage(chatId, '⚠️ Terjadi kesalahan, silakan coba lagi.');
+  }
 }
 
   generateAllLinks(config) {
