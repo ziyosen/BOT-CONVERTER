@@ -1,3 +1,4 @@
+mmmmmmmmmm
 import { generateClashConfig, generateNekoboxConfig, generateSingboxConfig } from './configGenerators.js';
 
 export default class TelegramBot {
@@ -138,39 +139,80 @@ export default class TelegramBot {
       const chatId = update.message.chat.id;
       const messageText = update.message.text || '';
 
-      if (messageText === '/start' || messageText === '/create') {
-        this.userProgress[chatId] = {};
+      if (messageText === '/start') {
+        await this.handleStartCommand(chatId);
+        return new Response('OK', { status: 200 });
+      }
 
-        if (messageText === '/start') {
-          await this.sendMessage(chatId, `
-*Selamat Datang*
+      if (messageText === '/create') {
+        await this.handleCreateCommand(chatId);
+        return new Response('OK', { status: 200 });
+      }
 
-Bot ini membantu Anda mengatur konfigurasi jaringan dengan mudah. Pilih 🌐 *Server*, 🔒 *Protocol*, dan pengaturan lainnya sesuai kebutuhan Anda.
-
-👤 *OWNER* :
-Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
-          return new Response('OK', { status: 200 });
-        }
-
-        if (messageText === '/create') {
-          const buttons = this.servers.map(server => ({
-            text: `${this.countryFlags[server]} ${server}`,
-            callback_data: `server_${server}`
-          }));
-
-          await this.sendInlineButtons(chatId, 'Pilih server:', buttons);
-          return new Response('OK', { status: 200 });
-        }
+      if (messageText === '/convert') {
+        await this.handleConvertCommand(chatId);
+        return new Response('OK', { status: 200 });
       }
 
       const proxyMatch = messageText.match(/^(\d+\.\d+\.\d+\.\d+):(\d+)$/);
       if (proxyMatch) {
-        const ip = proxyMatch[1];
-        const port = proxyMatch[2];
+        await this.handleProxyCheck(chatId, proxyMatch[1], proxyMatch[2]);
+        return new Response('OK', { status: 200 });
+      }
 
-        const proxyStatus = await this.checkProxyStatus(ip, port);
-        if (proxyStatus.status === 'active') {
-          await this.sendMessage(chatId, `✅ **Proxy Aktif Ditemukan**:
+      if (messageText.includes('://')) {
+        await this.handleLinkConversion(chatId, messageText);
+        return new Response('OK', { status: 200 });
+      }
+
+      await this.sendMessage(chatId, 'Perintah tidak dikenali. Gunakan /start, /create, atau /convert.');
+    } else if (update.callback_query) {
+      const chatId = update.callback_query.message.chat.id;
+      const messageId = update.callback_query.message.message_id;
+      const data = update.callback_query.data;
+      
+      // Update current message ID before processing
+      this.currentMessageId = messageId;
+      
+      await this.handleCallbackQuery(chatId, data);
+    }
+
+    return new Response('OK', { status: 200 });
+  }
+
+  async handleStartCommand(chatId) {
+    await this.sendMessage(chatId, `
+🤖 *Stupid World VPN Bot*
+
+Bot ini memiliki 3 fitur utama:
+
+1. */create* - Buat konfigurasi VPN baru
+2. */convert* - Konversi link VPN ke format lain
+3. *Check Proxy* - Kirim IP:PORT untuk mengecek status proxy
+
+👤 *OWNER* :
+Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
+  }
+
+  async handleCreateCommand(chatId) {
+    this.userProgress[chatId] = {};
+    const buttons = this.servers.map(server => ({
+      text: `${this.countryFlags[server]} ${server}`,
+      callback_data: `server_${server}`
+    }));
+
+    const { message_id } = await this.sendInlineButtons(chatId, 'Pilih server:', buttons);
+    this.currentMessageId = message_id;
+  }
+
+  async handleConvertCommand(chatId) {
+    await this.sendMessage(chatId, 'Kirimkan link konfigurasi V2Ray (VMess, VLESS, Trojan, Shadowsocks) dan saya akan mengubahnya ke format Clash, Nekobox, dan Singbox.\n\nContoh:\nvless://...\nvmess://...\ntrojan://...\nss://...');
+  }
+
+  async handleProxyCheck(chatId, ip, port) {
+    const proxyStatus = await this.checkProxyStatus(ip, port);
+    if (proxyStatus.status === 'active') {
+      await this.sendMessage(chatId, `✅ **Proxy Aktif Ditemukan**:
 
 \`\`\`
 🌐 IP : ${proxyStatus.ip}:${proxyStatus.port}
@@ -185,91 +227,169 @@ Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
 📍 Longitude : ${proxyStatus.longitude}
 \`\`\`
 `);
-        } else {
-          await this.sendMessage(chatId, `❌ Proxy tidak aktif: ${proxyStatus.message}`);
-        }
-        return new Response('OK', { status: 200 });
-      }
-
-      if (messageText.includes('://')) {
-        try {
-          const links = messageText.split('\n').filter(line => line.trim().includes('://'));
-          
-          if (links.length === 0) {
-            await this.sendMessage(chatId, 'No valid links found. Please send VMess, VLESS, Trojan, or Shadowsocks links.');
-            return new Response('OK', { status: 200 });
-          }
-
-          // Generate configurations
-          const clashConfig = generateClashConfig(links, true);
-          const nekoboxConfig = generateNekoboxConfig(links, true);
-          const singboxConfig = generateSingboxConfig(links, true);
-
-          // Send files
-          await this.sendDocument(chatId, clashConfig, 'clash.yaml', 'text/yaml');
-          await this.sendDocument(chatId, nekoboxConfig, 'nekobox.json', 'application/json');
-          await this.sendDocument(chatId, singboxConfig, 'singbox.bpf', 'application/json');
-
-        } catch (error) {
-          console.error('Error processing links:', error);
-          await this.sendMessage(chatId, `Error: ${error.message}`);
-        }
-      } else {
-        await this.sendMessage(chatId, 'Please send VMess, VLESS, Trojan, or Shadowsocks links for conversion.');
-      }
-    } else if (update.callback_query) {
-      const chatId = update.callback_query.message.chat.id;
-      const data = update.callback_query.data;
-      await this.handleCallbackQuery(chatId, data);
+    } else {
+      await this.sendMessage(chatId, `❌ Proxy tidak aktif: ${proxyStatus.message}`);
     }
-
-    return new Response('OK', { status: 200 });
   }
 
-  async handleCallbackQuery(chatId, data) {
-    if (data.startsWith('server_')) {
-      const server = data.split('_')[1];
-      this.userProgress[chatId].server = server;
-
-      if (this.currentMessageId !== null) {
-        await this.deleteMessage(chatId, this.currentMessageId);
-      }
-
-      const ipPort = await this.fetchProxyList(server, chatId);
-      if (!ipPort.includes(':')) {
-        await this.sendMessage(chatId, ipPort);
+  async handleLinkConversion(chatId, messageText) {
+    try {
+      const links = messageText.split('\n').filter(line => line.trim().includes('://'));
+      
+      if (links.length === 0) {
+        await this.sendMessage(chatId, 'Tidak ada link valid yang ditemukan. Kirimkan link VMess, VLESS, Trojan, atau Shadowsocks.');
         return;
       }
 
-      this.userProgress[chatId].ipPort = ipPort;
-      await this.sendMessage(chatId, `IP/Port aktif ditemukan: ${ipPort}`);
-      await this.sendInlineButtons(chatId, "Pilih wildcard atau No Wildcard:", [
-        { text: "Wildcard", callback_data: "wildcard" },
-        { text: "No Wildcard", callback_data: "non_wildcard" }
-      ]);
-    } else if (data === 'wildcard') {
-      this.userProgress[chatId].wildcard = 'Wildcard';
-      await this.deleteMessage(chatId, this.currentMessageId);
-      await this.sendInlineButtons(chatId, 'Pilih domain wildcard:', this.wildcardDomains.map(domain => ({
-        text: domain,
-        callback_data: `domain_${domain}`
-      })));
-    } else if (data === 'non_wildcard') {
-      this.userProgress[chatId].wildcard = 'No Wildcard';
-      this.userProgress[chatId].domain = 'vpn.stupidworld.web.id';
-      const links = this.generateAllLinks(this.userProgress[chatId]);
-      await this.deleteMessage(chatId, this.currentMessageId);
-      await this.sendMessage(chatId, this.formatLinkMessage(links));
-    } else if (data.startsWith('domain_')) {
-      const selectedDomain = data.split('_')[1];
-      this.userProgress[chatId].domain = selectedDomain;
-      const links = this.generateAllLinks(this.userProgress[chatId]);
-      await this.deleteMessage(chatId, this.currentMessageId);
-      await this.sendMessage(chatId, this.formatLinkMessage(links));
+      if (links.length > 10) {
+        await this.sendMessage(chatId, 'Maksimal 10 link per permintaan.');
+        return;
+      }
+
+      await this.sendMessage(chatId, '⏳ Sedang memproses konversi...');
+      
+      const clashConfig = generateClashConfig(links, true);
+      const nekoboxConfig = generateNekoboxConfig(links, true);
+      const singboxConfig = generateSingboxConfig(links, true);
+
+      await this.sendDocument(chatId, clashConfig, 'clash.yaml', 'text/yaml');
+      await this.sendDocument(chatId, nekoboxConfig, 'nekobox.json', 'application/json');
+      await this.sendDocument(chatId, singboxConfig, 'singbox.bpf', 'application/json');
+
+    } catch (error) {
+      console.error('Error processing links:', error);
+      await this.sendMessage(chatId, `Error: ${error.message}`);
     }
   }
 
+  async handleCallbackQuery(chatId, data) {
+    try {
+        console.log(`[DEBUG] Received callback: ${data} for chat ${chatId}`);
+        console.log(`[DEBUG] Current progress:`, this.userProgress[chatId]);
+
+        if (data.startsWith('server_')) {
+            // Handle server selection
+            const server = data.split('_')[1];
+            this.userProgress[chatId] = { server };
+            
+            await this.deleteMessage(chatId, this.currentMessageId);
+            
+            const searchingMsg = await this.sendMessage(chatId, `🔍 Mencari proxy untuk ${this.countryFlags[server]} ${server}...`);
+            
+            const ipPort = await this.fetchProxyList(server, chatId);
+            console.log(`[DEBUG] Found proxy: ${ipPort}`);
+            
+            if (!ipPort || !ipPort.includes(':')) {
+                await this.editMessage(chatId, searchingMsg, ipPort || 'Tidak dapat menemukan proxy');
+                return;
+            }
+
+            // Save ALL progress data
+            this.userProgress[chatId] = {
+                ...this.userProgress[chatId],
+                ipPort,
+                step: 'proxy_found'
+            };
+            
+            await this.deleteMessage(chatId, searchingMsg);
+            
+            // Send wildcard selection buttons
+            const { message_id } = await this.sendInlineButtons(chatId, 
+                `✅ Proxy ditemukan: ${ipPort}\nPilih tipe domain:`,
+                [
+                    { text: "🌐 Pakai Wildcard", callback_data: "wildcard" },
+                    { text: "🚫 Tanpa Wildcard", callback_data: "nowildcard" }
+                ]
+            );
+            this.currentMessageId = message_id;
+
+        } else if (data === 'wildcard' || data === 'nowildcard') {
+            console.log(`[DEBUG] Processing wildcard choice: ${data}`);
+            
+            // Verify we have all required data
+            if (!this.userProgress[chatId]?.ipPort) {
+                console.error('[ERROR] Missing proxy data:', this.userProgress[chatId]);
+                throw new Error('Konfigurasi proxy tidak lengkap. Silakan mulai ulang dengan /create');
+            }
+
+            // Update progress
+            this.userProgress[chatId].wildcard = data === 'wildcard' ? 'Wildcard' : 'No Wildcard';
+            
+            await this.deleteMessage(chatId, this.currentMessageId);
+
+            if (data === 'wildcard') {
+                // Show domain selection
+                const domainButtons = this.wildcardDomains.map(domain => ({
+                    text: domain,
+                    callback_data: `domain_${domain.replace(/\./g, '-')}` // Replace dots with dashes
+                }));
+                
+                const { message_id } = await this.sendInlineButtons(
+                    chatId,
+                    'Pilih domain wildcard:',
+                    domainButtons
+                );
+                this.currentMessageId = message_id;
+            } else {
+                // For no wildcard, use default domain and generate links
+                this.userProgress[chatId].domain = 'vpn.stupidworld.web.id';
+                await this.generateAndSendConfig(chatId);
+            }
+
+        } else if (data.startsWith('domain_')) {
+            // Handle domain selection
+            const selectedDomain = data.split('_')[1].replace(/-/g, '.'); // Convert back to domain
+            this.userProgress[chatId].domain = selectedDomain;
+            
+            await this.deleteMessage(chatId, this.currentMessageId);
+            await this.generateAndSendConfig(chatId);
+        }
+    } catch (error) {
+        console.error('[ERROR] Callback processing failed:', error);
+        await this.sendMessage(chatId, `⚠️ Error: ${error.message}\nSilakan gunakan /create untuk memulai ulang.`);
+        delete this.userProgress[chatId]; // Clean up
+    }
+}
+
+async generateAndSendConfig(chatId) {
+    try {
+        const config = this.userProgress[chatId];
+        console.log('[DEBUG] Generating config with:', config);
+        
+        // Validate all required fields
+        const requiredFields = ['server', 'ipPort', 'wildcard'];
+        const missingFields = requiredFields.filter(field => !config[field]);
+        
+        if (missingFields.length > 0) {
+            throw new Error(`Data tidak lengkap: ${missingFields.join(', ')}`);
+        }
+
+        // For wildcard, domain must be set
+        if (config.wildcard === 'Wildcard' && !config.domain) {
+            throw new Error('Domain wildcard belum dipilih');
+        }
+
+        // Generate the configuration links
+        const links = this.generateAllLinks(config);
+        
+        // Send the results
+        await this.sendMessage(chatId, this.formatLinkMessage(links));
+        
+        // Clear the progress
+        delete this.userProgress[chatId];
+        
+    } catch (error) {
+        console.error('[ERROR] Config generation failed:', error);
+        await this.sendMessage(chatId, `⚠️ Gagal membuat konfigurasi: ${error.message}\nSilakan coba /create lagi.`);
+        throw error;
+    }
+}
+
   generateAllLinks(config) {
+    if (!config || !config.server || !config.ipPort || !config.wildcard) {
+      throw new Error('Invalid configuration for generating links');
+    }
+
     const { server, ipPort, wildcard, domain } = config;
     const [ip, port] = ipPort.split(':');
 
@@ -290,7 +410,7 @@ Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
         ps: server,
         add: mainDomain,
         port: "443",
-        id: "bef63218-3a18-4f59-acac-28622247e22c",
+        id: uuid,
         aid: "0",
         net: "ws",
         type: "none",
@@ -298,21 +418,21 @@ Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
         path: `/Stupid-World/${ip}-${port}`,
         tls: "tls",
         sni: fullDomain,
-        scy: "zero"
+        scy: "auto"
       })),
       vmessNtls: `vmess://` + btoa(JSON.stringify({
         v: "2",
         ps: server,
         add: mainDomain,
         port: "80",
-        id: "bef63218-3a18-4f59-acac-28622247e22c",
+        id: uuid,
         aid: "0",
         net: "ws",
         type: "none",
         host: fullDomain,
         path: `/Stupid-World/${ip}-${port}`,
         tls: "",
-        scy: "zero"
+        scy: "auto"
       })),
       ss: `ss://${btoa(`${method}:${password}`)}@${mainDomain}:443?encryption=none&type=ws&host=${fullDomain}&path=%2FStupid-World%2F${ip}-${port}&security=tls&sni=${fullDomain}#${server}`
     };
@@ -385,9 +505,11 @@ Gunakan salah satu konfigurasi di aplikasi VPN Anda.`;
   }
 
   async sendInlineButtons(chatId, text, buttons) {
-    const chunkedButtons = [];
-    for (let i = 0; i < buttons.length; i += 4) {
-      chunkedButtons.push(buttons.slice(i, i + 4));
+    const chunkSize = 4;
+    const keyboard = [];
+    
+    for (let i = 0; i < buttons.length; i += chunkSize) {
+      keyboard.push(buttons.slice(i, i + chunkSize));
     }
 
     const url = `${this.apiUrl}/bot${this.token}/sendMessage`;
@@ -398,20 +520,29 @@ Gunakan salah satu konfigurasi di aplikasi VPN Anda.`;
         body: JSON.stringify({ 
           chat_id: chatId, 
           text, 
-          reply_markup: { inline_keyboard: chunkedButtons }, 
-          parse_mode: "Markdown" 
+          reply_markup: { inline_keyboard: keyboard },
+          parse_mode: "Markdown"
         }),
       });
+      
       const data = await response.json();
-      if (data.ok) this.currentMessageId = data.result.message_id;
+      if (data.ok) {
+        return data.result;
+      }
+      return null;
     } catch (error) {
       console.error("Error sending buttons:", error);
+      return null;
     }
   }
 
   async deleteMessage(chatId, messageId) {
     const url = `${this.apiUrl}/bot${this.token}/deleteMessage?chat_id=${chatId}&message_id=${messageId}`;
-    await fetch(url);
+    try {
+      await fetch(url);
+    } catch (error) {
+      console.error("Error deleting message:", error);
+    }
   }
 
   async sendDocument(chatId, content, filename, mimeType) {
@@ -420,13 +551,17 @@ Gunakan salah satu konfigurasi di aplikasi VPN Anda.`;
     formData.append('document', blob, filename);
     formData.append('chat_id', chatId.toString());
 
-    const response = await fetch(
-      `${this.apiUrl}/bot${this.token}/sendDocument`, {
-        method: 'POST',
-        body: formData
-      }
-    );
-
-    return response.json();
+    try {
+      const response = await fetch(
+        `${this.apiUrl}/bot${this.token}/sendDocument`, {
+          method: 'POST',
+          body: formData
+        }
+      );
+      return response.json();
+    } catch (error) {
+      console.error('Error sending document:', error);
+      return null;
+    }
   }
 }
