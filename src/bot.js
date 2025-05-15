@@ -138,39 +138,76 @@ export default class TelegramBot {
       const chatId = update.message.chat.id;
       const messageText = update.message.text || '';
 
-      if (messageText === '/start' || messageText === '/create') {
-        this.userProgress[chatId] = {};
+      if (messageText === '/start') {
+        await this.handleStartCommand(chatId);
+        return new Response('OK', { status: 200 });
+      }
 
-        if (messageText === '/start') {
-          await this.sendMessage(chatId, `
-*Selamat Datang*
+      if (messageText === '/create') {
+        await this.handleCreateCommand(chatId);
+        return new Response('OK', { status: 200 });
+      }
 
-Bot ini membantu Anda mengatur konfigurasi jaringan dengan mudah. Pilih 🌐 *Server*, 🔒 *Protocol*, dan pengaturan lainnya sesuai kebutuhan Anda.
+      if (messageText === '/convert') {
+        await this.handleConvertCommand(chatId);
+        return new Response('OK', { status: 200 });
+      }
+
+      // Handle proxy check if user sends IP:PORT format
+      const proxyMatch = messageText.match(/^(\d+\.\d+\.\d+\.\d+):(\d+)$/);
+      if (proxyMatch) {
+        await this.handleProxyCheck(chatId, proxyMatch[1], proxyMatch[2]);
+        return new Response('OK', { status: 200 });
+      }
+
+      // Handle link conversion if user sends URLs
+      if (messageText.includes('://')) {
+        await this.handleLinkConversion(chatId, messageText);
+        return new Response('OK', { status: 200 });
+      }
+
+      // Default response for unrecognized commands
+      await this.sendMessage(chatId, 'Perintah tidak dikenali. Gunakan /start, /create, atau /convert.');
+    } else if (update.callback_query) {
+      const chatId = update.callback_query.message.chat.id;
+      const data = update.callback_query.data;
+      await this.handleCallbackQuery(chatId, data);
+    }
+
+    return new Response('OK', { status: 200 });
+  }
+
+  async handleStartCommand(chatId) {
+    await this.sendMessage(chatId, `
+🤖 *Stupid World VPN Bot*
+
+Bot ini memiliki 3 fitur utama:
+
+1. */create* - Buat konfigurasi VPN baru
+2. */convert* - Konversi link VPN ke format lain
+3. *Check Proxy* - Kirim IP:PORT untuk mengecek status proxy
 
 👤 *OWNER* :
 Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
-          return new Response('OK', { status: 200 });
-        }
+  }
 
-        if (messageText === '/create') {
-          const buttons = this.servers.map(server => ({
-            text: `${this.countryFlags[server]} ${server}`,
-            callback_data: `server_${server}`
-          }));
+  async handleCreateCommand(chatId) {
+    this.userProgress[chatId] = {};
+    const buttons = this.servers.map(server => ({
+      text: `${this.countryFlags[server]} ${server}`,
+      callback_data: `server_${server}`
+    }));
+    await this.sendInlineButtons(chatId, 'Pilih server:', buttons);
+  }
 
-          await this.sendInlineButtons(chatId, 'Pilih server:', buttons);
-          return new Response('OK', { status: 200 });
-        }
-      }
+  async handleConvertCommand(chatId) {
+    await this.sendMessage(chatId, 'Kirimkan link konfigurasi V2Ray (VMess, VLESS, Trojan, Shadowsocks) dan saya akan mengubahnya ke format Clash, Nekobox, dan Singbox.\n\nContoh:\nvless://...\nvmess://...\ntrojan://...\nss://...');
+  }
 
-      const proxyMatch = messageText.match(/^(\d+\.\d+\.\d+\.\d+):(\d+)$/);
-      if (proxyMatch) {
-        const ip = proxyMatch[1];
-        const port = proxyMatch[2];
-
-        const proxyStatus = await this.checkProxyStatus(ip, port);
-        if (proxyStatus.status === 'active') {
-          await this.sendMessage(chatId, `✅ **Proxy Aktif Ditemukan**:
+  async handleProxyCheck(chatId, ip, port) {
+    const proxyStatus = await this.checkProxyStatus(ip, port);
+    if (proxyStatus.status === 'active') {
+      await this.sendMessage(chatId, `✅ **Proxy Aktif Ditemukan**:
 
 \`\`\`
 🌐 IP : ${proxyStatus.ip}:${proxyStatus.port}
@@ -185,45 +222,40 @@ Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
 📍 Longitude : ${proxyStatus.longitude}
 \`\`\`
 `);
-        } else {
-          await this.sendMessage(chatId, `❌ Proxy tidak aktif: ${proxyStatus.message}`);
-        }
-        return new Response('OK', { status: 200 });
-      }
-
-      if (messageText.includes('://')) {
-        try {
-          const links = messageText.split('\n').filter(line => line.trim().includes('://'));
-          
-          if (links.length === 0) {
-            await this.sendMessage(chatId, 'No valid links found. Please send VMess, VLESS, Trojan, or Shadowsocks links.');
-            return new Response('OK', { status: 200 });
-          }
-
-          // Generate configurations
-          const clashConfig = generateClashConfig(links, true);
-          const nekoboxConfig = generateNekoboxConfig(links, true);
-          const singboxConfig = generateSingboxConfig(links, true);
-
-          // Send files
-          await this.sendDocument(chatId, clashConfig, 'clash.yaml', 'text/yaml');
-          await this.sendDocument(chatId, nekoboxConfig, 'nekobox.json', 'application/json');
-          await this.sendDocument(chatId, singboxConfig, 'singbox.bpf', 'application/json');
-
-        } catch (error) {
-          console.error('Error processing links:', error);
-          await this.sendMessage(chatId, `Error: ${error.message}`);
-        }
-      } else {
-        await this.sendMessage(chatId, 'Please send VMess, VLESS, Trojan, or Shadowsocks links for conversion.');
-      }
-    } else if (update.callback_query) {
-      const chatId = update.callback_query.message.chat.id;
-      const data = update.callback_query.data;
-      await this.handleCallbackQuery(chatId, data);
+    } else {
+      await this.sendMessage(chatId, `❌ Proxy tidak aktif: ${proxyStatus.message}`);
     }
+  }
 
-    return new Response('OK', { status: 200 });
+  async handleLinkConversion(chatId, messageText) {
+    try {
+      const links = messageText.split('\n').filter(line => line.trim().includes('://'));
+      
+      if (links.length === 0) {
+        await this.sendMessage(chatId, 'Tidak ada link valid yang ditemukan. Kirimkan link VMess, VLESS, Trojan, atau Shadowsocks.');
+        return;
+      }
+
+      if (links.length > 10) {
+        await this.sendMessage(chatId, 'Maksimal 10 link per permintaan.');
+        return;
+      }
+
+      // Generate configurations
+      const clashConfig = generateClashConfig(links, true);
+      const nekoboxConfig = generateNekoboxConfig(links, true);
+      const singboxConfig = generateSingboxConfig(links, true);
+
+      // Send files
+      await this.sendMessage(chatId, '⏳ Sedang memproses konversi...');
+      await this.sendDocument(chatId, clashConfig, 'clash.yaml', 'text/yaml');
+      await this.sendDocument(chatId, nekoboxConfig, 'nekobox.json', 'application/json');
+      await this.sendDocument(chatId, singboxConfig, 'singbox.bpf', 'application/json');
+
+    } catch (error) {
+      console.error('Error processing links:', error);
+      await this.sendMessage(chatId, `Error: ${error.message}`);
+    }
   }
 
   async handleCallbackQuery(chatId, data) {
