@@ -1,4 +1,3 @@
-mmmmmmmmmm
 import { generateClashConfig, generateNekoboxConfig, generateSingboxConfig } from './configGenerators.js';
 
 export default class TelegramBot {
