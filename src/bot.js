@@ -263,12 +263,20 @@ Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
 
   async handleCallbackQuery(chatId, data) {
     try {
-        console.log(`Processing callback data: ${data} for chat ${chatId}`);
-        console.log(`Current user progress:`, this.userProgress[chatId]);
+        console.log(`[DEBUG] Callback data: ${data}`);
+        console.log(`[DEBUG] Current progress:`, JSON.stringify(this.userProgress[chatId]));
+
+        // Ensure user progress exists
+        if (!this.userProgress[chatId]) {
+            this.userProgress[chatId] = {};
+        }
 
         if (data.startsWith('server_')) {
             const server = data.split('_')[1];
-            this.userProgress[chatId] = { server };
+            this.userProgress[chatId] = {
+                server,
+                step: 'server_selected' // Track progress
+            };
             
             await this.deleteMessage(chatId, this.currentMessageId);
             
@@ -281,32 +289,34 @@ Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
             }
 
             this.userProgress[chatId].ipPort = ipPort;
+            this.userProgress[chatId].step = 'proxy_found';
             await this.deleteMessage(chatId, searchingMsg);
             
             const { message_id } = await this.sendInlineButtons(chatId, 
-                `✅ Active proxy found: ${ipPort}\nSelect domain type:`,
+                `✅ Proxy Active: ${ipPort}\nSelect domain type:`,
                 [
                     { text: "🌐 Wildcard", callback_data: "wildcard" },
-                    { text: "🚫 No Wildcard", callback_data: "nowildcard" } // Changed to nowildcard
+                    { text: "🚫 No Wildcard", callback_data: "nowildcard" }
                 ]
             );
             this.currentMessageId = message_id;
 
         } else if (data === 'wildcard' || data === 'nowildcard') {
-            console.log(`Wildcard selection: ${data}`);
-            
+            // Verify we have required data
             if (!this.userProgress[chatId]?.ipPort) {
-                throw new Error('Missing IP:PORT in user progress');
+                console.error('[ERROR] Missing IP:PORT in progress:', this.userProgress[chatId]);
+                throw new Error('Proxy configuration missing. Please start over with /create');
             }
 
             this.userProgress[chatId].wildcard = data === 'wildcard' ? 'Wildcard' : 'No Wildcard';
+            this.userProgress[chatId].step = 'wildcard_selected';
             
             await this.deleteMessage(chatId, this.currentMessageId);
 
             if (data === 'wildcard') {
                 const domainButtons = this.wildcardDomains.map(domain => ({
                     text: domain,
-                    callback_data: `domain_${domain.replace(/\./g, '-')}` // Using hyphens instead of dots
+                    callback_data: `domain_${domain.replace(/\./g, '-')}`
                 }));
                 
                 const { message_id } = await this.sendInlineButtons(
@@ -321,28 +331,39 @@ Jika ada kendala atau saran, silakan hubungi [OWNER](https://t.me/notx15).`);
             }
 
         } else if (data.startsWith('domain_')) {
-            const selectedDomain = data.split('_')[1].replace(/-/g, '.'); // Convert back to domain format
+            // Verify previous steps completed
+            if (!this.userProgress[chatId]?.ipPort || !this.userProgress[chatId]?.wildcard) {
+                throw new Error('Configuration incomplete. Please start over with /create');
+            }
+
+            const selectedDomain = data.split('_')[1].replace(/-/g, '.');
             this.userProgress[chatId].domain = selectedDomain;
+            this.userProgress[chatId].step = 'domain_selected';
             
             await this.deleteMessage(chatId, this.currentMessageId);
             await this.generateAndSendLinks(chatId);
         }
     } catch (error) {
-        console.error('Callback handler error:', error);
-        await this.sendMessage(chatId, `⚠️ Error: ${error.message}\nPlease try /create again.`);
+        console.error('[ERROR] Callback handler failed:', error);
+        await this.sendMessage(chatId, `⚠️ ${error.message}\nPlease use /create to start over.`);
+        delete this.userProgress[chatId]; // Clean up broken state
     }
 }
 
 async generateAndSendLinks(chatId) {
     try {
         const config = this.userProgress[chatId];
-        console.log('Generating links with config:', config);
+        console.log('[DEBUG] Generating links with:', config);
         
-        if (!config?.server || !config?.ipPort || !config?.wildcard) {
-            throw new Error('Incomplete configuration');
+        // Validate all required fields
+        const requiredFields = ['server', 'ipPort', 'wildcard'];
+        const missingFields = requiredFields.filter(field => !config[field]);
+        
+        if (missingFields.length > 0) {
+            throw new Error(`Missing configuration: ${missingFields.join(', ')}`);
         }
 
-        if (config.wildcard === 'Wildcard' && !config?.domain) {
+        if (config.wildcard === 'Wildcard' && !config.domain) {
             throw new Error('Domain not selected');
         }
 
@@ -352,7 +373,8 @@ async generateAndSendLinks(chatId) {
         // Clear progress after successful generation
         delete this.userProgress[chatId];
     } catch (error) {
-        console.error('Link generation error:', error);
+        console.error('[ERROR] Link generation failed:', error);
+        await this.sendMessage(chatId, `⚠️ Failed to generate links: ${error.message}\nPlease try /create again.`);
         throw error;
     }
 }
