@@ -150,3 +150,97 @@ function parseShadowsocksLink(link) {
 
   throw new Error('Shadowsocks link invalid');
 }
+
+export async function checkProxyStatus(ip, port) {
+    const url = `https://api2.stupidworld.web.id/check?ip=${ip}:${port}`;
+    console.log(`Checking proxy status for ${ip}:${port}...`);
+
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+
+        console.log("API Response:", data);
+
+        if (data.proxyip === true) {
+            return {
+                status: 'active',
+                ip: data.ip ?? 'Unknown',
+                port: data.port ?? 'Unknown',
+                asOrganization: data.asOrganization ?? 'Unknown',
+                countryCode: data.countryCode ?? 'Unknown',
+                countryName: data.countryName ?? 'Unknown',
+                countryFlag: data.countryFlag ?? '',
+                asn: data.asn ?? 'Unknown',
+                city: data.colo ?? '',
+                httpProtocol: data.httpProtocol ?? 'Unknown',
+                delay: data.delay ?? 'Unknown',
+                latitude: data.latitude ?? 'Unknown',
+                longitude: data.longitude ?? 'Unknown'
+            };
+        } else {
+            return {
+                status: 'dead',
+                message: data.message ?? 'Proxy mati'
+            };
+        }
+    } catch (error) {
+        console.error('Error checking proxy status:', error);
+        return {
+            status: 'dead',
+            message: 'Gagal menghubungi server pengecekan.'
+        };
+    }
+}
+
+export async function fetchProxyList(countryCode, chatId) {
+    const url = `https://raw.githubusercontent.com/stpdwrld/Stupid-Tunnel/refs/heads/main/allproxy.txt`;
+
+    try {
+        const searchingMessageId = await sendMessage(chatId, '⏳ Sedang mencari proxy aktif...');
+        if (!searchingMessageId) return;
+
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Gagal mengambil data');
+
+        const textData = await response.text();
+        const lines = textData.split('\n').map(line => line.trim()).filter(Boolean);
+
+        const proxyList = lines
+            .map(line => {
+                const [ip, port, country, isp] = line.split(',');
+                return { ip, port, country, isp };
+            })
+            .filter(proxy => proxy.country.toLowerCase() === countryCode.toLowerCase());
+
+        if (proxyList.length === 0) {
+            await editMessage(chatId, searchingMessageId, '⚠️ Tidak ada proxy tersedia untuk negara ini.');
+            return 'Tidak ada proxy tersedia untuk negara ini.';
+        }
+
+        let unusedProxies = proxyList.filter(p => `${p.ip}:${p.port}` !== selectedProxies[chatId]);
+
+        if (unusedProxies.length === 0) {
+            selectedProxies[chatId] = null;
+            unusedProxies = proxyList;
+        }
+
+        unusedProxies = unusedProxies.sort(() => Math.random() - 0.5);
+
+        for (const { ip, port, isp } of unusedProxies) {
+            if (await checkProxyStatus(ip, port)) {
+                const proxyStr = `${ip}:${port}`;
+                selectedProxies[chatId] = proxyStr;
+                await editMessage(chatId, searchingMessageId, `✅ IP/Port aktif ditemukan: ${proxyStr}\nISP: ${isp}`);
+                await deleteMessage(chatId, searchingMessageId);
+                return proxyStr;
+            }
+        }
+
+        await editMessage(chatId, searchingMessageId, '⚠️ Tidak ada proxy aktif yang tersedia saat ini.');
+        await deleteMessage(chatId, searchingMessageId);
+        return 'Tidak ada proxy aktif yang tersedia saat ini.';
+    } catch (error) {
+        console.error('Error fetching proxy list:', error);
+        return 'Terjadi kesalahan, coba lagi nanti.';
+    }
+}
