@@ -1,4 +1,4 @@
-// Menggunakan TextDecoder untuk decode base64 di lingkungan CF Workers
+// Utility functions for decoding and parsing proxy links
 function decodeBase64(str) {
   // Alternatif 1: Menggunakan atob (browser API)
   if (typeof atob === 'function') {
@@ -151,6 +151,9 @@ function parseShadowsocksLink(link) {
   throw new Error('Shadowsocks link invalid');
 }
 
+// Proxy checking and management functions
+const selectedProxies = {};
+
 export async function checkProxyStatus(ip, port) {
     const url = `https://api2.stupidworld.web.id/check?ip=${ip}:${port}`;
     console.log(`Checking proxy status for ${ip}:${port}...`);
@@ -227,7 +230,8 @@ export async function fetchProxyList(countryCode, chatId) {
         unusedProxies = unusedProxies.sort(() => Math.random() - 0.5);
 
         for (const { ip, port, isp } of unusedProxies) {
-            if (await checkProxyStatus(ip, port)) {
+            const status = await checkProxyStatus(ip, port);
+            if (status.status === 'active') {
                 const proxyStr = `${ip}:${port}`;
                 selectedProxies[chatId] = proxyStr;
                 await editMessage(chatId, searchingMessageId, `✅ IP/Port aktif ditemukan: ${proxyStr}\nISP: ${isp}`);
@@ -243,4 +247,18 @@ export async function fetchProxyList(countryCode, chatId) {
         console.error('Error fetching proxy list:', error);
         return 'Terjadi kesalahan, coba lagi nanti.';
     }
+}
+
+// Helper functions (need to be implemented or imported)
+async function sendMessage(chatId, text) {
+    // Implement this function to send message to chat
+    // Returns message ID
+}
+
+async function editMessage(chatId, messageId, text) {
+    // Implement this function to edit message
+}
+
+async function deleteMessage(chatId, messageId) {
+    // Implement this function to delete message
 }
