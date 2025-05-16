@@ -1,3 +1,88 @@
+export function generateUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+        const r = (Math.random() * 16) | 0;
+        const v = c === 'x' ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+    });
+}
+
+export const passuid = generateUUID();
+
+export function generateAllLinks(config) {
+    const { server, ipPort, wildcard, domain } = config;
+    const [ip, port] = ipPort.split(':');
+
+    const uuid = passuid;
+    const method = 'aes-128-gcm';
+    const password = uuid;
+
+    const mainDomain = wildcard === 'Wildcard' ? domain : 'vpn.stupidworld.web.id';
+    const fullDomain = wildcard === 'Wildcard' ? `${domain}.vpn.stupidworld.web.id` : 'vpn.stupidworld.web.id';
+
+    return {
+        vlessTls: `vless://${uuid}@${mainDomain}:443?host=${fullDomain}&path=%2FStupid-World%2F${ip}-${port}&security=tls&sni=${fullDomain}&type=ws#${server}`,
+        vlessNtls: `vless://${uuid}@${mainDomain}:80?flow=&host=${fullDomain}&path=%2FStupid-World%2F${ip}-${port}&type=ws#${server}`,
+        trojanTls: `trojan://${uuid}@${mainDomain}:443?host=${fullDomain}&path=%2FStupid-World%2F${ip}-${port}&security=tls&sni=${fullDomain}&type=ws#${server}`,
+        trojanNtls: `trojan://${uuid}@${mainDomain}:80?host=${fullDomain}&path=%2FStupid-World%2F${ip}-${port}&type=ws#${server}`,
+        vmessTls: `vmess://` + btoa(JSON.stringify({
+            v: "2",
+            ps: server,
+            add: mainDomain,
+            port: "443",
+            id: "bef63218-3a18-4f59-acac-28622247e22c",
+            aid: "0",
+            net: "ws",
+            type: "none",
+            host: fullDomain,
+            path: `/Stupid-World/${ip}-${port}`,
+            tls: "tls",
+            sni: fullDomain,
+            scy: "zero"
+        })),
+        vmessNtls: `vmess://` + btoa(JSON.stringify({
+            v: "2",
+            ps: server,
+            add: mainDomain,
+            port: "80",
+            id: "bef63218-3a18-4f59-acac-28622247e22c",
+            aid: "0",
+            net: "ws",
+            type: "none",
+            host: fullDomain,
+            path: `/Stupid-World/${ip}-${port}`,
+            tls: "",
+            scy: "zero"
+        })),
+        ss: `ss://${btoa(`${method}:${password}`)}@${mainDomain}:443?encryption=none&type=ws&host=${fullDomain}&path=%2FStupid-World%2F${ip}-${port}&security=tls&sni=${fullDomain}#${server}`
+    };
+}
+
+export function formatLinkMessage(links) {
+    return `✅ Akun berhasil dibuat:
+
+*VMESS TLS:*
+\`\`\`${links.vmessTls}\`\`\`
+
+*VMESS NTLS:*
+\`\`\`${links.vmessNtls}\`\`\`
+
+*VLESS TLS:*
+\`\`\`${links.vlessTls}\`\`\`
+
+*VLESS NTLS:*
+\`\`\`${links.vlessNtls}\`\`\`
+
+*TROJAN TLS:*
+\`\`\`${links.trojanTls}\`\`\`
+
+*TROJAN NTLS:*
+\`\`\`${links.trojanNtls}\`\`\`
+
+*SHADOWSOCKS:*
+\`\`\`${links.ss}\`\`\`
+
+Gunakan salah satu konfigurasi di aplikasi VPN Anda.`;
+}
 import { parseV2RayLink } from './linkParser.js';
 
 export function generateClashConfig(links, isFullConfig = false) {
@@ -773,90 +858,4 @@ export function generateSingboxConfig(links, isFullConfig = false) {
   }
   
   return config;
-}
-
-export function generateUUID() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-        const r = (Math.random() * 16) | 0;
-        const v = c === 'x' ? r : (r & 0x3) | 0x8;
-        return v.toString(16);
-    });
-}
-
-export const passuid = generateUUID();
-
-export function generateAllLinks(config) {
-    const { server, ipPort, wildcard, domain } = config;
-    const [ip, port] = ipPort.split(':');
-
-    const uuid = passuid;
-    const method = 'aes-128-gcm';
-    const password = uuid;
-
-    const mainDomain = wildcard === 'Wildcard' ? domain : 'vpn.stupidworld.web.id';
-    const fullDomain = wildcard === 'Wildcard' ? `${domain}.vpn.stupidworld.web.id` : 'vpn.stupidworld.web.id';
-
-    return {
-        vlessTls: `vless://${uuid}@${mainDomain}:443?host=${fullDomain}&path=%2FStupid-World%2F${ip}-${port}&security=tls&sni=${fullDomain}&type=ws#${server}`,
-        vlessNtls: `vless://${uuid}@${mainDomain}:80?flow=&host=${fullDomain}&path=%2FStupid-World%2F${ip}-${port}&type=ws#${server}`,
-        trojanTls: `trojan://${uuid}@${mainDomain}:443?host=${fullDomain}&path=%2FStupid-World%2F${ip}-${port}&security=tls&sni=${fullDomain}&type=ws#${server}`,
-        trojanNtls: `trojan://${uuid}@${mainDomain}:80?host=${fullDomain}&path=%2FStupid-World%2F${ip}-${port}&type=ws#${server}`,
-        vmessTls: `vmess://` + btoa(JSON.stringify({
-            v: "2",
-            ps: server,
-            add: mainDomain,
-            port: "443",
-            id: "bef63218-3a18-4f59-acac-28622247e22c",
-            aid: "0",
-            net: "ws",
-            type: "none",
-            host: fullDomain,
-            path: `/Stupid-World/${ip}-${port}`,
-            tls: "tls",
-            sni: fullDomain,
-            scy: "zero"
-        })),
-        vmessNtls: `vmess://` + btoa(JSON.stringify({
-            v: "2",
-            ps: server,
-            add: mainDomain,
-            port: "80",
-            id: "bef63218-3a18-4f59-acac-28622247e22c",
-            aid: "0",
-            net: "ws",
-            type: "none",
-            host: fullDomain,
-            path: `/Stupid-World/${ip}-${port}`,
-            tls: "",
-            scy: "zero"
-        })),
-        ss: `ss://${btoa(`${method}:${password}`)}@${mainDomain}:443?encryption=none&type=ws&host=${fullDomain}&path=%2FStupid-World%2F${ip}-${port}&security=tls&sni=${fullDomain}#${server}`
-    };
-}
-
-export function formatLinkMessage(links) {
-    return `✅ Akun berhasil dibuat:
-
-*VMESS TLS:*
-\`\`\`${links.vmessTls}\`\`\`
-
-*VMESS NTLS:*
-\`\`\`${links.vmessNtls}\`\`\`
-
-*VLESS TLS:*
-\`\`\`${links.vlessTls}\`\`\`
-
-*VLESS NTLS:*
-\`\`\`${links.vlessNtls}\`\`\`
-
-*TROJAN TLS:*
-\`\`\`${links.trojanTls}\`\`\`
-
-*TROJAN NTLS:*
-\`\`\`${links.trojanNtls}\`\`\`
-
-*SHADOWSOCKS:*
-\`\`\`${links.ss}\`\`\`
-
-Gunakan salah satu konfigurasi di aplikasi VPN Anda.`;
 }
