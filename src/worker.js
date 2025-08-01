@@ -6,9 +6,9 @@ export default {
       try {
         const update = await request.json();
         const bot = new TelegramBot(env.TELEGRAM_BOT_TOKEN);
-        return bot.handleUpdate(update);
+        return await bot.handleUpdate(update);  // Tambahkan await di sini
       } catch (error) {
-        return new Response(JSON.stringify({ error: error.message }), { 
+        return new Response(JSON.stringify({ error: error.message }), {
           status: 500,
           headers: { 'Content-Type': 'application/json' }
         });
