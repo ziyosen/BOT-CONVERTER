@@ -5,4 +5,4 @@ workers_dev = true
 main = "src/worker.js"
 
 [vars]
-TELEGRAM_BOT_TOKEN = "7616969823:AAFglRaOaVE0ek0u0QbYXYgI6JY8IUN4M6E"
+TELEGRAM_BOT_TOKEN = "7616969823:8442905731:AAEfkiuOY_2z3QGiuAZpwyP4uiShf3S23Yg"
