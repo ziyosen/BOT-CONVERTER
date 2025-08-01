@@ -1,9 +1,10 @@
 import { generateClashConfig, generateNekoboxConfig, generateSingboxConfig } from './configGenerators.js';
 
 export default class TelegramBot {
-  constructor(token, apiUrl = 'https://api.telegram.org') {
-    this.token = token;
-    this.apiUrl = `${apiUrl}/bot${token}`;
+  constructor(telegramToken, cloudflareToken, apiUrl = 'https://api.telegram.org') {
+    this.telegramToken = telegramToken;
+    this.apiUrl = apiUrl;
+    this.cfChecker = new CloudflareChecker(cloudflareToken);
   }
 
   async handleUpdate(update) {
