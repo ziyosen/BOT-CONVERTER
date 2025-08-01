@@ -2,8 +2,8 @@ import { generateClashConfig, generateNekoboxConfig, generateSingboxConfig } fro
 
 export default class TelegramBot {
   constructor(token, apiUrl = 'https://api.telegram.org') {
-    this.token = '7616969823:AAFglRaOaVE0ek0u0QbYXYgI6JY8IUN4M6E';
-    this.apiUrl = 'https://api.telegram.org/bot7616969823:AAFglRaOaVE0ek0u0QbYXYgI6JY8IUN4M6E';
+    this.token = token;
+    this.apiUrl = `${apiUrl}/bot${token}`;
   }
 
   async handleUpdate(update) {
@@ -13,22 +13,20 @@ export default class TelegramBot {
     const text = update.message.text || '';
 
     if (text.startsWith('/start')) {
-      await this.sendMessage(chatId, '🤖 Stupid World Converter Bot\n\nKirimkan saya link konfigurasi V2Ray dan saya akan mengubahnya ke format Singbox,Nekobox Dan Clash.\n\nContoh:\nvless://...\nvmess://...\ntrojan://...\nss://...\n\nCatatan:\n- Maksimal 10 link per permintaan.\n- Disarankan menggunakan Singbox versi 1.10.3 atau 1.11.8 untuk hasil terbaik.\n\nbaca baik-baik dulu sebelum nanya.');
+      await this.sendMessage(chatId, '🤖 Stupid World Converter Bot\n\nKirimkan saya link konfigurasi V2Ray dan saya akan mengubahnya ke format Singbox, Nekobox dan Clash.\n\nContoh:\nvless://...\nvmess://...\ntrojan://...\nss://...\n\nCatatan:\n- Maksimal 10 link per permintaan.\n- Disarankan menggunakan Singbox versi 1.10.3 atau 1.11.8 untuk hasil terbaik.\n\nBaca baik-baik dulu sebelum nanya.');
     } else if (text.includes('://')) {
       try {
         const links = text.split('\n').filter(line => line.trim().includes('://'));
-        
+
         if (links.length === 0) {
           await this.sendMessage(chatId, 'No valid links found. Please send VMess, VLESS, Trojan, or Shadowsocks links.');
           return new Response('OK', { status: 200 });
         }
 
-        // Generate configurations
         const clashConfig = generateClashConfig(links, true);
         const nekoboxConfig = generateNekoboxConfig(links, true);
         const singboxConfig = generateSingboxConfig(links, true);
 
-        // Send files
         await this.sendDocument(chatId, clashConfig, 'clash.yaml', 'text/yaml');
         await this.sendDocument(chatId, nekoboxConfig, 'nekobox.json', 'application/json');
         await this.sendDocument(chatId, singboxConfig, 'singbox.bpf', 'application/json');
@@ -45,7 +43,7 @@ export default class TelegramBot {
   }
 
   async sendMessage(chatId, text) {
-    const url = `${this.apiUrl}/bot${this.token}/sendMessage`;
+    const url = `${this.apiUrl}/sendMessage`;
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -63,12 +61,10 @@ export default class TelegramBot {
     formData.append('document', blob, filename);
     formData.append('chat_id', chatId.toString());
 
-    const response = await fetch(
-      `${this.apiUrl}/bot${this.token}/sendDocument`, {
-        method: 'POST',
-        body: formData
-      }
-    );
+    const response = await fetch(`${this.apiUrl}/sendDocument`, {
+      method: 'POST',
+      body: formData
+    });
 
     return response.json();
   }
