@@ -2,8 +2,8 @@ import { generateClashConfig, generateNekoboxConfig, generateSingboxConfig } fro
 
 export default class TelegramBot {
   constructor(token, apiUrl = 'https://api.telegram.org') {
-    this.token = token;
-    this.apiUrl = apiUrl;
+    this.token = 7616969823:AAFglRaOaVE0ek0u0QbYXYgI6JY8IUN4M6E;
+    this.apiUrl = https://api.telegram.org/7616969823:AAFglRaOaVE0ek0u0QbYXYgI6JY8IUN4M6E;
   }
 
   async handleUpdate(update) {
